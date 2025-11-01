@@ -32,11 +32,13 @@ dependencies:
     sdk: flutter
 
   # Nossos pacotes Firebase.
-  # Adicione estas 4 linhas abaixo:
-  firebase_core: ^3.2.0          # O pacote principal para inicializar o Firebase
-  firebase_auth: ^5.1.2         # Para Cuidar do Login/Cadastro
-  cloud_firestore: ^5.1.0      # O Banco de Dados (para salvar os alimentos)
-  firebase_storage: ^12.1.0     # O Armazenamento (para salvar as fotos)
+  firebase_core: ^3.2.0          
+  firebase_auth: ^5.1.2         
+  cloud_firestore: ^5.1.0      
+  firebase_storage: ^12.1.0     
+  
+  # Pacote de UI de Autenticação
+  firebase_ui_auth: ^2.0.0      
 
   cupertino_icons: ^1.0.6
 
