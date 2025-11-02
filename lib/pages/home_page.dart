@@ -1,7 +1,10 @@
+// lib/pages/home_page.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 1. Importar o Firestore
-import '../components/refeicao_card.dart'; // 2. Importar nosso Card
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // NOVO: Import do Storage
+import '../components/refeicao_card.dart';
 import 'registro_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -12,7 +15,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // 3. Pegar o usuário atual
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
   void logout() {
@@ -26,12 +28,36 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // NOVO: Função para deletar a refeição
+  Future<void> _deletarRefeicao(String docId, String imageUrl) async {
+    try {
+      // 1. Deletar o documento do Firestore
+      await FirebaseFirestore.instance.collection('refeicoes').doc(docId).delete();
+
+      // 2. Deletar a imagem do Storage
+      await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+      
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Refeição deletada com sucesso!")),
+        );
+      }
+
+    } catch (e) {
+      print("Erro ao deletar refeição: $e");
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro ao deletar: $e")),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("NutriSnap Dashboard"),
-        backgroundColor: Colors.green,
         actions: [
           IconButton(
             onPressed: logout,
@@ -41,27 +67,20 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       
-      // 4. Substituir o body por um StreamBuilder
       body: StreamBuilder<QuerySnapshot>(
-        // 5. O "Stream": Ouvir a coleção 'refeicoes'
         stream: FirebaseFirestore.instance
             .collection('refeicoes')
-            // 6. Onde o 'userId' for igual ao ID do usuário logado
             .where('userId', isEqualTo: currentUser?.uid)
-            // 7. Ordenar pelas mais recentes primeiro
-            .orderBy('timestamp', descending: true) 
-            .snapshots(), // "Tire uma foto" (snapshot) do banco toda vez que ele mudar
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
         
         builder: (context, snapshot) {
-          // 8. Se estiver carregando, mostre um loading
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          // 9. Se der erro
           if (snapshot.hasError) {
             return Center(child: Text("Erro: ${snapshot.error}"));
           }
-          // 10. Se não tiver dados (nenhuma refeição salva)
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
@@ -71,26 +90,46 @@ class _HomePageState extends State<HomePage> {
             );
           }
 
-          // 11. Se tiver dados, mostre a lista!
           final List<DocumentSnapshot> documentos = snapshot.data!.docs;
 
           return ListView.builder(
             padding: const EdgeInsets.all(16.0),
             itemCount: documentos.length,
             itemBuilder: (context, index) {
-              // Pegar os dados do documento
               final Map<String, dynamic> data =
                   documentos[index].data() as Map<String, dynamic>;
               
-              // Converter o Timestamp do Firebase para DateTime do Dart
               final Timestamp timestamp = data['timestamp'];
               final DateTime dataRefeicao = timestamp.toDate();
+              
+              final String docId = documentos[index].id;
+              final String imageUrl = data['imageUrl'];
 
-              // Retornar o nosso Card customizado
-              return RefeicaoCard(
-                imageUrl: data['imageUrl'],
-                alimentos: data['alimentos'],
-                timestamp: dataRefeicao,
+              // NOVO: Envolvendo o Card com o Dismissible
+              return Dismissible(
+                // 1. Chave ÚNICA: Essencial para o Flutter saber quem é quem
+                key: Key(docId),
+
+                // 2. Ação: O que fazer quando o item for arrastado
+                onDismissed: (direction) {
+                  _deletarRefeicao(docId, imageUrl);
+                },
+
+                // 3. O Fundo: O que aparece por trás (o "vermelho")
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20.0),
+                  margin: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                
+                // 4. O Filho: O widget que será arrastado
+                child: RefeicaoCard(
+                  imageUrl: imageUrl,
+                  alimentos: data['alimentos'],
+                  timestamp: dataRefeicao,
+                ),
               );
             },
           );
@@ -99,7 +138,6 @@ class _HomePageState extends State<HomePage> {
 
       floatingActionButton: FloatingActionButton(
         onPressed: irParaPaginaRegistro,
-        backgroundColor: Colors.green,
         child: const Icon(Icons.add_a_photo),
         tooltip: "Registrar Refeição",
       ),

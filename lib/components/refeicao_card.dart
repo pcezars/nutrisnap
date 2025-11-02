@@ -18,9 +18,6 @@ class RefeicaoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
-      elevation: 3,
-      clipBehavior: Clip.antiAlias, // Corta a imagem para caber no Card
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

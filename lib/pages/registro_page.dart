@@ -196,7 +196,6 @@ class _RegistroPageState extends State<RegistroPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Registrar Nova Refeição"),
-        backgroundColor: Colors.green[700],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

@@ -1,9 +1,9 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-
-// Importe nosso "Porteiro"
-import 'auth_gate.dart'; 
+import 'auth_gate.dart';
+import 'theme/app_theme.dart'; // NOVO: Importar nosso tema
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,11 +19,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false, // Remove o banner "debug"
-      
-      // Mude o 'home' para o nosso AuthGate!
-      home: AuthGate(), 
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: const AuthGate(),
+      // NOVO: Aplicar o tema global ao app
+      theme: appTheme,
     );
   }
 }
