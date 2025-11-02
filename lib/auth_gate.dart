@@ -1,6 +1,7 @@
+// lib/auth_gate.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'pages/home_page.dart';
+import 'profile_gate.dart'; // NOVO: Importa o ProfileGate
 import 'pages/login_page.dart';
 
 class AuthGate extends StatelessWidget {
@@ -11,13 +12,13 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Se não houver dados (usuário null), mostre o Login
+        
         if (!snapshot.hasData) {
           return const LoginPage();
         }
 
-        // Se houver dados (usuário logado), mostre a Home
-        return const HomePage();
+        // MODIFICADO: Em vez de HomePage, vá para o ProfileGate!
+        return const ProfileGate(); 
       },
     );
   }

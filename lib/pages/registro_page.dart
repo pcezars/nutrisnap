@@ -1,15 +1,14 @@
 // lib/pages/registro_page.dart
 
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-// NOVO: Imports do Gemini
 import 'package:google_generative_ai/google_generative_ai.dart';
-import '../api_key.dart'; // Nossa chave de API secreta
+import '../api_key.dart';
 
 class RegistroPage extends StatefulWidget {
   const RegistroPage({super.key});
@@ -20,64 +19,80 @@ class RegistroPage extends StatefulWidget {
 
 class _RegistroPageState extends State<RegistroPage> {
   File? _imagemSelecionada;
-  final TextEditingController _alimentosController = TextEditingController();
+  List<Map<String, dynamic>> _alimentosAnalisados = [];
+  
+  int _totalCalorias = 0;
+  int _totalProteinas = 0;
+  int _totalCarboidratos = 0;
+  int _totalGorduras = 0;
+  
   final ImagePicker _picker = ImagePicker();
-
-  bool _isLoading = false; // Loading do botão "Salvar"
-  
-  // NOVO: Loading do Gemini (enquanto analisa a imagem)
-  bool _isAnalysing = false;
-  
-  // NOVO: Instância do Modelo do Gemini
   late final GenerativeModel _model;
 
-  // NOVO: Inicializar o modelo do Gemini quando a tela abre
+  bool _isLoading = false; 
+  bool _isAnalysing = false;
+
   @override
   void initState() {
     super.initState();
     _model = GenerativeModel(
-      model: 'gemini-2.5-flash', // O modelo que entende imagens
+      model: 'gemini-2.5-flash',
       apiKey: geminiApiKey,
     );
   }
 
-  // (A função _salvarRefeicao continua igual à da Fase 3)
+  // MODIFICADO: Esta função agora salva a NOVA estrutura de dados
   Future<void> _salvarRefeicao() async {
+    // 1. Validar se os campos estão preenchidos
     if (_imagemSelecionada == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Por favor, selecione uma imagem.")),
       );
       return;
     }
-    if (_alimentosController.text.isEmpty) {
+    // MODIFICADO: Checa a lista, não o controller
+    if (_alimentosAnalisados.isEmpty) { 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Por favor, descreva os alimentos.")),
+        const SnackBar(content: Text("Por favor, aguarde a análise da IA.")),
       );
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _isLoading = true; // Inicia o loading do botão Salvar
     });
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) return; 
+
+      // 2. Fazer o upload da imagem (como antes)
       final String nomeArquivo = DateTime.now().millisecondsSinceEpoch.toString();
       final Reference refStorage = FirebaseStorage.instance
           .ref()
           .child('refeicoes')
           .child(user.uid)
           .child('$nomeArquivo.jpg');
+
       await refStorage.putFile(_imagemSelecionada!);
       final String downloadUrl = await refStorage.getDownloadURL();
+
+      // 3. MODIFICADO: Salvar os DADOS RICOS no Firestore
       await FirebaseFirestore.instance.collection('refeicoes').add({
         'userId': user.uid,
         'emailUsuario': user.email,
-        'alimentos': _alimentosController.text,
         'imageUrl': downloadUrl,
         'timestamp': FieldValue.serverTimestamp(),
+        
+        // --- NOSSOS NOVOS CAMPOS ---
+        'alimentosLista': _alimentosAnalisados, // A lista de mapas
+        'totalCalorias': _totalCalorias,
+        'totalProteinas': _totalProteinas,
+        'totalCarboidratos': _totalCarboidratos,
+        'totalGorduras': _totalGorduras,
       });
+
+      // 4. Sucesso! (como antes)
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Refeição salva com sucesso!")),
@@ -99,8 +114,12 @@ class _RegistroPageState extends State<RegistroPage> {
       }
     }
   }
+
+  // (O resto do arquivo: _mostrarOpcoesEscolha, _pegarImagem, _analisarImagem, build, _buildListaAlimentos, _buildTotalColumn)
+  // ... (NENHUMA OUTRA MUDANÇA É NECESSÁRIA) ...
+  // ... (COLE O RESTANTE DO SEU ARQUIVO ANTIGO A PARTIR DAQUI) ...
   
-  // (A função _mostrarOpcoesEscolha continua igual)
+  // (Função _mostrarOpcoesEscolha)
   Future<void> _mostrarOpcoesEscolha() async {
     showModalBottomSheet(
       context: context,
@@ -131,15 +150,15 @@ class _RegistroPageState extends State<RegistroPage> {
     );
   }
 
-  // MODIFICADO: A função de pegar imagem agora chama a análise
+  // (Função _pegarImagem)
   Future<void> _pegarImagem(ImageSource source) async {
     try {
       final XFile? foto = await _picker.pickImage(source: source);
       if (foto != null) {
         setState(() {
           _imagemSelecionada = File(foto.path);
+          _alimentosAnalisados = []; // Limpa a análise anterior
         });
-        // NOVO: Chamar a IA logo após selecionar a foto
         _analisarImagem();
       }
     } catch (e) {
@@ -147,50 +166,82 @@ class _RegistroPageState extends State<RegistroPage> {
     }
   }
 
-  // NOVO: Função que chama o Gemini
+  // (Função _analisarImagem)
   Future<void> _analisarImagem() async {
     if (_imagemSelecionada == null) return;
 
     setState(() {
-      _isAnalysing = true; // Liga o loading da IA
+      _isAnalysing = true;
+      _totalCalorias = 0;
+      _totalProteinas = 0;
+      _totalCarboidratos = 0;
+      _totalGorduras = 0;
     });
 
     try {
-      // 1. Ler os bytes da imagem
       final bytes = await _imagemSelecionada!.readAsBytes();
-
-      // 2. Criar a "pergunta" (prompt) para a IA
       final prompt = [
         Content.multi([
           TextPart(
-              "Identifique os alimentos principais nesta imagem. "
-              "Responda APENAS com os nomes dos alimentos, separados por vírgula e com a primeira letra maiúscula. "
-              "Exemplo: Arroz, Feijão, Bife"),
+              "Analise esta refeição. Estime os alimentos, gramas (g), calorias (kcal), proteínas (p), carboidratos (c) e gorduras (f). "
+              "Responda APENAS com um array JSON. "
+              "O array deve conter objetos com as chaves: 'alimento' (String), 'gramas' (int), 'calorias' (int), 'proteinas' (int), 'carboidratos' (int), 'gorduras' (int). "
+              "Exemplo de formato: "
+              "[{\"alimento\": \"Arroz branco\", \"gramas\": 150, \"calorias\": 200, \"proteinas\": 4, \"carboidratos\": 45, \"gorduras\": 0}, "
+              "{\"alimento\": \"Feijão carioca\", \"gramas\": 100, \"calorias\": 90, \"proteinas\": 6, \"carboidratos\": 16, \"gorduras\": 0}]"
+          ),
           DataPart('image/jpeg', bytes),
         ])
       ];
 
-      // 3. Enviar para a IA e obter a resposta
       final response = await _model.generateContent(prompt);
 
-      // 4. Atualizar o campo de texto!
-      setState(() {
-        _alimentosController.text = response.text ?? 'Não foi possível identificar';
-        _isAnalysing = false; // Desliga o loading da IA
-      });
+      if (response.text != null) {
+        String jsonText = response.text!
+            .replaceAll("```json", "")
+            .replaceAll("```", "")
+            .trim();
+            
+        final List<dynamic> jsonResponse = jsonDecode(jsonText);
+        
+        int tempCal = 0;
+        int tempProt = 0;
+        int tempCarb = 0;
+        int tempGord = 0;
+
+        final List<Map<String, dynamic>> alimentos = jsonResponse.map((item) {
+          final map = item as Map<String, dynamic>;
+          tempCal += (map['calorias'] as int? ?? 0);
+          tempProt += (map['proteinas'] as int? ?? 0);
+          tempCarb += (map['carboidratos'] as int? ?? 0);
+          tempGord += (map['gorduras'] as int? ?? 0);
+          return map;
+        }).toList();
+        
+        setState(() {
+          _alimentosAnalisados = alimentos;
+          _totalCalorias = tempCal;
+          _totalProteinas = tempProt;
+          _totalCarboidratos = tempCarb;
+          _totalGorduras = tempGord;
+        });
+      }
+      
     } catch (e) {
       print("Erro ao analisar com Gemini: $e");
       if(mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Erro ao analisar imagem: $e")),
         );
-        setState(() {
-          _isAnalysing = false;
-        });
       }
+    } finally {
+      setState(() {
+        _isAnalysing = false;
+      });
     }
   }
 
+  // (Função build)
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -201,9 +252,6 @@ class _RegistroPageState extends State<RegistroPage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            
-            // MODIFICADO: O container da imagem agora é um Stack
-            // para mostrar o loading em cima da imagem.
             Stack(
               alignment: Alignment.center,
               children: [
@@ -219,19 +267,13 @@ class _RegistroPageState extends State<RegistroPage> {
                     child: _imagemSelecionada != null
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.file(
-                              _imagemSelecionada!,
-                              fit: BoxFit.cover,
-                            ),
+                            child: Image.file(_imagemSelecionada!, fit: BoxFit.cover),
                           )
                         : const Center(
-                            child: Icon(Icons.camera_alt,
-                                size: 50, color: Colors.grey),
+                            child: Icon(Icons.camera_alt, size: 50, color: Colors.grey),
                           ),
                   ),
                 ),
-
-                // NOVO: Overlay de Loading da IA
                 if (_isAnalysing)
                   Container(
                     height: 200,
@@ -249,27 +291,96 @@ class _RegistroPageState extends State<RegistroPage> {
               ],
             ),
             const SizedBox(height: 20),
-
-            TextField(
-              controller: _alimentosController, // O Gemini vai preencher este!
-              decoration: const InputDecoration(
-                labelText: "Alimentos (ex: Arroz, Feijão, Bife)",
-                border: OutlineInputBorder(),
-              ),
-            ),
+            
+            _buildListaAlimentos(),
+            
             const SizedBox(height: 20),
-
+            
             ElevatedButton(
               onPressed: _isLoading ? null : _salvarRefeicao,
               child: _isLoading
-                  ? const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    )
+                  ? const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white))
                   : const Text("Salvar Refeição"),
             )
           ],
         ),
       ),
+    );
+  }
+
+  // (Função _buildListaAlimentos)
+  Widget _buildListaAlimentos() {
+    if (_alimentosAnalisados.isEmpty) {
+      return const Center(
+        child: Text("A análise da IA aparecerá aqui."),
+      );
+    }
+    
+    return Column(
+      children: [
+        const Text(
+          "Análise da Refeição",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+
+        ListView.builder(
+          itemCount: _alimentosAnalisados.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(), 
+          itemBuilder: (context, index) {
+            final alimento = _alimentosAnalisados[index];
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 4.0),
+              child: ListTile(
+                title: Text("${alimento['alimento']} (${alimento['gramas']}g)"),
+                subtitle: Text(
+                  "Kcal: ${alimento['calorias']} | P: ${alimento['proteinas']}g | C: ${alimento['carboidratos']}g | G: ${alimento['gorduras']}g"
+                ),
+              ),
+            );
+          },
+        ),
+        
+        const SizedBox(height: 20),
+        
+        const Text(
+          "Total da Refeição",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          color: Colors.green[50], 
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildTotalColumn("Kcal", _totalCalorias),
+                _buildTotalColumn("Proteínas", _totalProteinas, "g"),
+                _buildTotalColumn("Carbos", _totalCarboidratos, "g"),
+                _buildTotalColumn("Gorduras", _totalGorduras, "g"),
+              ],
+            ),
+          ),
+        )
+      ],
+    );
+  }
+
+  // (Função _buildTotalColumn)
+  Column _buildTotalColumn(String label, int value, [String sufixo = ""]) {
+    return Column(
+      children: [
+        Text(
+          value.toString() + sufixo,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.black54),
+        ),
+      ],
     );
   }
 }

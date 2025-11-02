@@ -15,8 +15,8 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
-  // Função para deletar a refeição
   Future<void> _deletarRefeicao(String docId, String imageUrl) async {
+    // (A função de deletar continua 100% igual)
     try {
       await FirebaseFirestore.instance.collection('refeicoes').doc(docId).delete();
       await FirebaseStorage.instance.refFromURL(imageUrl).delete();
@@ -50,7 +50,8 @@ class _FeedPageState extends State<FeedPage> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
-          return Center(child: Text("Erro: ${snapshot.error}"));
+          // O Erro 'Null' is not a subtype of 'String' apareceria aqui
+          return Center(child: Text("Erro ao carregar feed: ${snapshot.error}"));
         }
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(
@@ -76,6 +77,8 @@ class _FeedPageState extends State<FeedPage> {
             final String docId = documentos[index].id;
             final String imageUrl = data['imageUrl'];
 
+            // MODIFICADO: Passando os novos dados para o Card
+            // Usamos '??' (operador nulo) como segurança
             return Dismissible(
               key: Key(docId),
               onDismissed: (direction) {
@@ -90,8 +93,13 @@ class _FeedPageState extends State<FeedPage> {
               ),
               child: RefeicaoCard(
                 imageUrl: imageUrl,
-                alimentos: data['alimentos'],
                 timestamp: dataRefeicao,
+                // Passando os novos dados ricos
+                alimentosLista: data['alimentosLista'] ?? [],
+                totalCalorias: data['totalCalorias'] ?? 0,
+                totalProteinas: data['totalProteinas'] ?? 0,
+                totalCarboidratos: data['totalCarboidratos'] ?? 0,
+                totalGorduras: data['totalGorduras'] ?? 0,
               ),
             );
           },
