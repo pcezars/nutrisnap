@@ -32,7 +32,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
-        minSdkVersion(23)
+        minSdkVersion(24)
     }
 
     buildTypes {
