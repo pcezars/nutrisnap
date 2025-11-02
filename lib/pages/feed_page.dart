@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../components/refeicao_card.dart';
+import 'chat_page.dart'; // NOVO
 
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
@@ -236,6 +237,30 @@ class _FeedPageState extends State<FeedPage> {
             ],
           ),
           const Divider(height: 24),
+
+TextButton.icon(
+            icon: const Icon(Icons.smart_toy_outlined),
+            label: const Text("Perguntar ao Nutri Coach"),
+            onPressed: () {
+              Navigator.push(
+                context,
+                // MODIFICADO: Estamos a passar os dados para o construtor
+                MaterialPageRoute(
+                  builder: (context) => ChatPage(
+                    metaCalorias: metaCal,
+                    metaProteinas: metaProt,
+                    metaCarboidratos: metaCarb,
+                    metaGorduras: metaGord,
+                    consumidoCalorias: consumidoCal,
+                    consumidoProteinas: consumidoProt,
+                    consumidoCarboidratos: consumidoCarb,
+                    consumidoGorduras: consumidoGord,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10), // Espaçamento extra
 
           // 2. Resumo de Macros
           Row(
