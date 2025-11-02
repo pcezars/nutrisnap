@@ -106,9 +106,18 @@ class _ChatPageState extends State<ChatPage> {
       _isLoading = true; // Desabilita o botão de enviar
       _mensagens.add({'role': 'user', 'texto': mensagemUsuario});
       _textController.clear();
+      
+      // NOVO: Adiciona a bolha "..." imediatamente
+      _mensagens.add({'role': 'ia', 'texto': '...'});
     });
     
     _scrollParaFim();
+
+    // Pega o índice da mensagem "..." que acabámos de adicionar
+    final int iaMessageIndex = _mensagens.length - 1;
+    
+    // NOVO: Flag para controlar se é o primeiro pedaço de texto
+    bool isFirstChunk = true;
 
     // 1. Constrói o contexto (igual a antes)
     final String contextoCompleto = 
@@ -122,33 +131,32 @@ class _ChatPageState extends State<ChatPage> {
         "2. Use formatação Markdown (como **negrito** para títulos) para organizar a resposta."
         "3. Mantenha a resposta o mais breve e prática possível.";
         
-    // 2. NOVO: Adiciona uma "bolha de chat" vazia para a IA
-    setState(() {
-      _mensagens.add({'role': 'ia', 'texto': ''});
-    });
-    // Pega o índice da mensagem que acabámos de adicionar
-    final int iaMessageIndex = _mensagens.length - 1;
-
     try {
-      // 3. NOVO: Chama o 'generateContentStream'
+      // 2. Chama o 'generateContentStream' (igual a antes)
       final responseStream = _model.generateContentStream([
         Content.text(contextoCompleto)
       ]);
 
-      // 4. NOVO: Ouve o "Stream" de pedaços (chunks)
+      // 3. Ouve o "Stream" de pedaços (chunks)
       await for (final chunk in responseStream) {
         final chunkText = chunk.text;
         if (chunkText != null) {
           setState(() {
-            // Anexa o novo pedaço de texto à mensagem existente
-            _mensagens[iaMessageIndex]['texto'] = 
-                _mensagens[iaMessageIndex]['texto']! + chunkText;
+            if (isFirstChunk) {
+              // 4. NOVO: Se for o primeiro pedaço, SUBSTITUI o "..."
+              _mensagens[iaMessageIndex]['texto'] = chunkText;
+              isFirstChunk = false; // Já não é o primeiro
+            } else {
+              // 5. NOVO: Se não for, ANEXA o texto
+              _mensagens[iaMessageIndex]['texto'] = 
+                  _mensagens[iaMessageIndex]['texto']! + chunkText;
+            }
           });
           _scrollParaFim(); // Faz scroll a cada novo pedaço
         }
       }
       
-      // 5. NOVO: O Stream terminou, reativa o botão
+      // 6. O Stream terminou, reativa o botão
       setState(() {
         _isLoading = false;
       });
@@ -157,6 +165,7 @@ class _ChatPageState extends State<ChatPage> {
       print("Erro ao chamar o Gemini (Stream): $e");
       setState(() {
         _isLoading = false;
+        // Se der erro, substitui o "..." pela mensagem de erro
         _mensagens[iaMessageIndex]['texto'] = 'Ocorreu um erro ao contactar a IA. Tente mais tarde.';
       });
     }
