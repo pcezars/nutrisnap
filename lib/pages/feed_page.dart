@@ -7,7 +7,15 @@ import '../components/refeicao_card.dart';
 import 'chat_page.dart';
 
 class FeedPage extends StatefulWidget {
-  const FeedPage({super.key});
+  // NOVO: A página agora recebe o estado e as ações da sua "mãe" (HomePage)
+  final Set<String> favoritosImageUrls;
+  final Function(Map<String, dynamic>) onToggleFavorito;
+
+  const FeedPage({
+    super.key,
+    required this.favoritosImageUrls,
+    required this.onToggleFavorito,
+  });
 
   @override
   State<FeedPage> createState() => _FeedPageState();
@@ -18,8 +26,8 @@ class _FeedPageState extends State<FeedPage> {
   late Stream<DocumentSnapshot> _perfilStream;
   late Stream<QuerySnapshot> _refeicoesStream;
   
-  // NOVO: Um Set para guardar as URLs das imagens favoritas
-  Set<String> _favoritosImageUrls = {};
+  // REMOVIDO: O estado local de favoritos foi removido
+  // Set<String> _favoritosImageUrls = {}; 
 
   @override
   void initState() {
@@ -42,36 +50,14 @@ class _FeedPageState extends State<FeedPage> {
           .orderBy('timestamp', descending: true)
           .snapshots();
           
-      // NOVO: Carrega os favoritos uma vez
-      _carregarFavoritos();
+      // REMOVIDO: _carregarFavoritos() foi removido daqui
     }
   }
   
-  // NOVO: Função que carrega os favoritos na inicialização
-  Future<void> _carregarFavoritos() async {
-    if (currentUser == null) return;
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(currentUser!.uid)
-          .collection('favoritos')
-          .get();
-      
-      // Criamos um Set com todas as imageUrls dos favoritos
-      final urls = snapshot.docs.map((doc) => doc.data()['imageUrl'] as String).toSet();
-      
-      if (mounted) {
-        setState(() {
-          _favoritosImageUrls = urls;
-        });
-      }
-    } catch (e) {
-      print("Erro ao carregar favoritos: $e");
-    }
-  }
+  // REMOVIDO: A função _carregarFavoritos() foi movida para a home_page.dart
 
   Future<void> _deletarRefeicao(String docId, String imageUrl) async {
-    // (Função de deletar - sem mudanças)
+    // (A função de deletar continua igual)
     try {
       await FirebaseFirestore.instance.collection('refeicoes').doc(docId).delete();
       await FirebaseStorage.instance.refFromURL(imageUrl).delete();
@@ -90,79 +76,16 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  // MODIFICADO: A lógica de favoritar agora atualiza o estado local
-  Future<void> _favoritarRefeicao(Map<String, dynamic> refeicaoData) async {
-    if (currentUser == null) return;
-
-    final String imageUrl = refeicaoData['imageUrl'];
-
-    // Lógica de "Unfavorite" (se já for favorito, remove)
-    if (_favoritosImageUrls.contains(imageUrl)) {
-      try {
-        // Encontra o documento favorito pela imageUrl
-        final query = await FirebaseFirestore.instance
-            .collection('usuarios').doc(currentUser!.uid).collection('favoritos')
-            .where('imageUrl', isEqualTo: imageUrl)
-            .get();
-        
-        // Deleta todos os docs encontrados (deve ser só 1)
-        for (final doc in query.docs) {
-          await doc.reference.delete();
-        }
-
-        if (mounted) {
-          setState(() {
-            _favoritosImageUrls.remove(imageUrl); // Remove do estado local
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Refeição removida dos Favoritos.")),
-          );
-        }
-      } catch (e) {
-        print("Erro ao desfavoritar: $e");
-      }
-      return; // Para a execução
-    }
-
-    // Lógica de "Favorite" (se não for favorito, adiciona)
-    try {
-      refeicaoData.remove('timestamp');
-      refeicaoData.remove('userId'); 
-      refeicaoData.remove('emailUsuario');
-      
-      final String nomeFavorito = (refeicaoData['alimentosLista'] as List)
-          .map((item) => item['alimento'])
-          .join(', ');
-
-      await FirebaseFirestore.instance
-          .collection('usuarios').doc(currentUser!.uid).collection('favoritos')
-          .add({'nome': nomeFavorito, ...refeicaoData});
-      
-      if (mounted) {
-        setState(() {
-          _favoritosImageUrls.add(imageUrl); // Adiciona ao estado local
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Refeição salva nos Favoritos! 🌟")),
-        );
-      }
-    } catch (e) {
-      print("Erro ao favoritar: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erro ao favoritar: $e")),
-        );
-      }
-    }
-  }
+  // REMOVIDO: A função _favoritarRefeicao() foi movida para a home_page.dart
 
   @override
   Widget build(BuildContext context) {
-    // (O build do StreamBuilder do Perfil continua igual)
     if (currentUser == null) { return const Center(child: Text("Usuário não encontrado.")); }
+    
     return StreamBuilder<DocumentSnapshot>(
       stream: _perfilStream,
       builder: (context, perfilSnapshot) {
+        // (Lógica do Perfil - Continua igual)
         if (perfilSnapshot.connectionState == ConnectionState.waiting) { return const Center(child: CircularProgressIndicator()); }
         if (!perfilSnapshot.hasData || !perfilSnapshot.data!.exists) { return const Center(child: Text("Perfil não encontrado.")); }
         final perfilData = perfilSnapshot.data!.data() as Map<String, dynamic>;
@@ -171,10 +94,10 @@ class _FeedPageState extends State<FeedPage> {
         final int metaCarb = (perfilData['metaCarboidratos'] ?? 0).round();
         final int metaGord = (perfilData['metaGorduras'] ?? 0).round();
 
-        // (O StreamBuilder das Refeições continua igual)
         return StreamBuilder<QuerySnapshot>(
           stream: _refeicoesStream,
           builder: (context, refeicoesSnapshot) {
+            // (Lógica das Refeições - Continua igual)
             if (refeicoesSnapshot.connectionState == ConnectionState.waiting) { return const Center(child: CircularProgressIndicator()); }
             if (refeicoesSnapshot.hasError) { return Center(child: Text("Erro ao carregar refeições: ${refeicoesSnapshot.error}")); }
 
@@ -188,10 +111,10 @@ class _FeedPageState extends State<FeedPage> {
               consumidoGord += (data['totalGorduras'] ?? 0) as int;
             }
 
-            // (A 'Column' principal continua igual)
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // (Dashboard - Continua igual)
                 _buildDashboard(
                   metaCal, consumidoCal, metaProt, consumidoProt,
                   metaCarb, consumidoCarb, metaGord, consumidoGord
@@ -214,8 +137,8 @@ class _FeedPageState extends State<FeedPage> {
                             final docId = documentos[index].id;
                             final imageUrl = data['imageUrl'];
                             
-                            // MODIFICADO: Verificamos o estado no nosso Set local
-                            final bool isFavorito = _favoritosImageUrls.contains(imageUrl);
+                            // MODIFICADO: Usa a lista vinda da 'HomePage'
+                            final bool isFavorito = widget.favoritosImageUrls.contains(imageUrl);
 
                             return Dismissible(
                               key: Key(docId),
@@ -235,9 +158,10 @@ class _FeedPageState extends State<FeedPage> {
                                 totalProteinas: data['totalProteinas'] ?? 0,
                                 totalCarboidratos: data['totalCarboidratos'] ?? 0,
                                 totalGorduras: data['totalGorduras'] ?? 0,
-                                isFavorito: isFavorito, // Passa o estado
+                                isFavorito: isFavorito, 
+                                // MODIFICADO: Chama a função vinda da 'HomePage'
                                 onFavoritePressed: () {
-                                  _favoritarRefeicao(data); // Chama a função de toggle
+                                  widget.onToggleFavorito(data);
                                 },
                               ),
                             );
