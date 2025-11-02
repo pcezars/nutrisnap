@@ -41,58 +41,40 @@ class _RegistroPageState extends State<RegistroPage> {
     );
   }
 
-  // MODIFICADO: Esta função agora salva a NOVA estrutura de dados
+  // (Função _salvarRefeicao - Continua igual, sem mudanças)
   Future<void> _salvarRefeicao() async {
-    // 1. Validar se os campos estão preenchidos
     if (_imagemSelecionada == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Por favor, selecione uma imagem.")),
       );
       return;
     }
-    // MODIFICADO: Checa a lista, não o controller
     if (_alimentosAnalisados.isEmpty) { 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Por favor, aguarde a análise da IA.")),
+        const SnackBar(content: Text("Nenhum alimento analisado para salvar.")),
       );
       return;
     }
-
-    setState(() {
-      _isLoading = true; // Inicia o loading do botão Salvar
-    });
-
+    setState(() { _isLoading = true; });
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return; 
-
-      // 2. Fazer o upload da imagem (como antes)
       final String nomeArquivo = DateTime.now().millisecondsSinceEpoch.toString();
       final Reference refStorage = FirebaseStorage.instance
-          .ref()
-          .child('refeicoes')
-          .child(user.uid)
-          .child('$nomeArquivo.jpg');
-
+          .ref().child('refeicoes').child(user.uid).child('$nomeArquivo.jpg');
       await refStorage.putFile(_imagemSelecionada!);
       final String downloadUrl = await refStorage.getDownloadURL();
-
-      // 3. MODIFICADO: Salvar os DADOS RICOS no Firestore
       await FirebaseFirestore.instance.collection('refeicoes').add({
         'userId': user.uid,
         'emailUsuario': user.email,
         'imageUrl': downloadUrl,
         'timestamp': FieldValue.serverTimestamp(),
-        
-        // --- NOSSOS NOVOS CAMPOS ---
-        'alimentosLista': _alimentosAnalisados, // A lista de mapas
+        'alimentosLista': _alimentosAnalisados,
         'totalCalorias': _totalCalorias,
         'totalProteinas': _totalProteinas,
         'totalCarboidratos': _totalCarboidratos,
         'totalGorduras': _totalGorduras,
       });
-
-      // 4. Sucesso! (como antes)
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Refeição salva com sucesso!")),
@@ -107,19 +89,11 @@ class _RegistroPageState extends State<RegistroPage> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) { setState(() { _isLoading = false; }); }
     }
   }
 
-  // (O resto do arquivo: _mostrarOpcoesEscolha, _pegarImagem, _analisarImagem, build, _buildListaAlimentos, _buildTotalColumn)
-  // ... (NENHUMA OUTRA MUDANÇA É NECESSÁRIA) ...
-  // ... (COLE O RESTANTE DO SEU ARQUIVO ANTIGO A PARTIR DAQUI) ...
-  
-  // (Função _mostrarOpcoesEscolha)
+  // (Função _mostrarOpcoesEscolha - Continua igual)
   Future<void> _mostrarOpcoesEscolha() async {
     showModalBottomSheet(
       context: context,
@@ -128,20 +102,12 @@ class _RegistroPageState extends State<RegistroPage> {
           child: Wrap(
             children: <Widget>[
               ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Galeria'),
-                onTap: () {
-                  _pegarImagem(ImageSource.gallery);
-                  Navigator.of(context).pop();
-                },
+                leading: const Icon(Icons.photo_library), title: const Text('Galeria'),
+                onTap: () { _pegarImagem(ImageSource.gallery); Navigator.of(context).pop(); },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Câmera'),
-                onTap: () {
-                  _pegarImagem(ImageSource.camera);
-                  Navigator.of(context).pop();
-                },
+                leading: const Icon(Icons.photo_camera), title: const Text('Câmera'),
+                onTap: () { _pegarImagem(ImageSource.camera); Navigator.of(context).pop(); },
               ),
             ],
           ),
@@ -150,33 +116,24 @@ class _RegistroPageState extends State<RegistroPage> {
     );
   }
 
-  // (Função _pegarImagem)
+  // (Função _pegarImagem - Continua igual)
   Future<void> _pegarImagem(ImageSource source) async {
     try {
       final XFile? foto = await _picker.pickImage(source: source);
       if (foto != null) {
         setState(() {
           _imagemSelecionada = File(foto.path);
-          _alimentosAnalisados = []; // Limpa a análise anterior
+          _alimentosAnalisados = [];
         });
         _analisarImagem();
       }
-    } catch (e) {
-      print("Erro ao pegar imagem: $e");
-    }
+    } catch (e) { print("Erro ao pegar imagem: $e"); }
   }
 
-  // (Função _analisarImagem)
+  // MODIFICADO: Função de análise da IA agora chama o _recalcularTotais
   Future<void> _analisarImagem() async {
     if (_imagemSelecionada == null) return;
-
-    setState(() {
-      _isAnalysing = true;
-      _totalCalorias = 0;
-      _totalProteinas = 0;
-      _totalCarboidratos = 0;
-      _totalGorduras = 0;
-    });
+    setState(() { _isAnalysing = true; });
 
     try {
       final bytes = await _imagemSelecionada!.readAsBytes();
@@ -197,36 +154,21 @@ class _RegistroPageState extends State<RegistroPage> {
       final response = await _model.generateContent(prompt);
 
       if (response.text != null) {
-        String jsonText = response.text!
-            .replaceAll("```json", "")
-            .replaceAll("```", "")
-            .trim();
-            
+        String jsonText = response.text!.replaceAll("```json", "").replaceAll("```", "").trim();
         final List<dynamic> jsonResponse = jsonDecode(jsonText);
         
-        int tempCal = 0;
-        int tempProt = 0;
-        int tempCarb = 0;
-        int tempGord = 0;
-
         final List<Map<String, dynamic>> alimentos = jsonResponse.map((item) {
-          final map = item as Map<String, dynamic>;
-          tempCal += (map['calorias'] as int? ?? 0);
-          tempProt += (map['proteinas'] as int? ?? 0);
-          tempCarb += (map['carboidratos'] as int? ?? 0);
-          tempGord += (map['gorduras'] as int? ?? 0);
-          return map;
+          return item as Map<String, dynamic>;
         }).toList();
         
         setState(() {
           _alimentosAnalisados = alimentos;
-          _totalCalorias = tempCal;
-          _totalProteinas = tempProt;
-          _totalCarboidratos = tempCarb;
-          _totalGorduras = tempGord;
         });
+        
+        // NOVO: Chama a função de recálculo
+        _recalcularTotais(); 
+
       }
-      
     } catch (e) {
       print("Erro ao analisar com Gemini: $e");
       if(mounted) {
@@ -235,13 +177,121 @@ class _RegistroPageState extends State<RegistroPage> {
         );
       }
     } finally {
-      setState(() {
-        _isAnalysing = false;
-      });
+      setState(() { _isAnalysing = false; });
     }
   }
 
-  // (Função build)
+  // NOVO: Função dedicada para calcular os totais
+  void _recalcularTotais() {
+    int tempCal = 0;
+    int tempProt = 0;
+    int tempCarb = 0;
+    int tempGord = 0;
+
+    // Itera sobre a lista de alimentos e soma tudo
+    for (final item in _alimentosAnalisados) {
+      tempCal += (item['calorias'] as int? ?? 0);
+      tempProt += (item['proteinas'] as int? ?? 0);
+      tempCarb += (item['carboidratos'] as int? ?? 0);
+      tempGord += (item['gorduras'] as int? ?? 0);
+    }
+
+    // Atualiza o estado da UI com os novos totais
+    setState(() {
+      _totalCalorias = tempCal;
+      _totalProteinas = tempProt;
+      _totalCarboidratos = tempCarb;
+      _totalGorduras = tempGord;
+    });
+  }
+
+  // NOVO: A função que mostra o Pop-up de Adicionar/Editar
+  Future<void> _mostrarDialogoEdicao({Map<String, dynamic>? item, int? index}) async {
+    // Define se estamos editando um item existente ou criando um novo
+    final bool isEditMode = item != null;
+    
+    // Controladores para o formulário do pop-up
+    final _formKey = GlobalKey<FormState>();
+    final _nomeController = TextEditingController(text: isEditMode ? item['alimento'] : '');
+    final _gramasController = TextEditingController(text: isEditMode ? item['gramas'].toString() : '');
+    final _kcalController = TextEditingController(text: isEditMode ? item['calorias'].toString() : '');
+    final _protController = TextEditingController(text: isEditMode ? item['proteinas'].toString() : '');
+    final _carbController = TextEditingController(text: isEditMode ? item['carboidratos'].toString() : '');
+    final _gordController = TextEditingController(text: isEditMode ? item['gorduras'].toString() : '');
+    
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(isEditMode ? "Editar Alimento" : "Adicionar Alimento"),
+          content: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(controller: _nomeController, decoration: const InputDecoration(labelText: "Alimento"), validator: (v) => v!.isEmpty ? "Obrigatório" : null),
+                  TextFormField(controller: _gramasController, decoration: const InputDecoration(labelText: "Gramas (g)"), keyboardType: TextInputType.number),
+                  TextFormField(controller: _kcalController, decoration: const InputDecoration(labelText: "Calorias (kcal)"), keyboardType: TextInputType.number),
+                  TextFormField(controller: _protController, decoration: const InputDecoration(labelText: "Proteínas (g)"), keyboardType: TextInputType.number),
+                  TextFormField(controller: _carbController, decoration: const InputDecoration(labelText: "Carboidratos (g)"), keyboardType: TextInputType.number),
+                  TextFormField(controller: _gordController, decoration: const InputDecoration(labelText: "Gorduras (g)"), keyboardType: TextInputType.number),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            // Botão Deletar (só aparece no modo de edição)
+            if (isEditMode)
+              TextButton(
+                onPressed: () {
+                  _alimentosAnalisados.removeAt(index!);
+                  _recalcularTotais(); // Recalcula!
+                  Navigator.of(context).pop();
+                },
+                child: const Text("Deletar", style: TextStyle(color: Colors.red)),
+              ),
+            
+            // Botão Cancelar
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancelar"),
+            ),
+
+            // Botão Salvar
+            ElevatedButton(
+              onPressed: () {
+                if (_formKey.currentState!.validate()) {
+                  // Cria o novo mapa de dados
+                  final novoItem = {
+                    'alimento': _nomeController.text,
+                    'gramas': int.tryParse(_gramasController.text) ?? 0,
+                    'calorias': int.tryParse(_kcalController.text) ?? 0,
+                    'proteinas': int.tryParse(_protController.text) ?? 0,
+                    'carboidratos': int.tryParse(_carbController.text) ?? 0,
+                    'gorduras': int.tryParse(_gordController.text) ?? 0,
+                  };
+                  
+                  // Atualiza a lista
+                  if (isEditMode) {
+                    _alimentosAnalisados[index!] = novoItem;
+                  } else {
+                    _alimentosAnalisados.add(novoItem);
+                  }
+                  
+                  _recalcularTotais(); // Recalcula!
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text("Salvar"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // (Função build - O "corpo" do app)
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -252,50 +302,36 @@ class _RegistroPageState extends State<RegistroPage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // (Stack da Imagem - Continua igual)
             Stack(
               alignment: Alignment.center,
               children: [
                 GestureDetector(
                   onTap: _mostrarOpcoesEscolha,
                   child: Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    height: 200, width: double.infinity,
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(12)),
                     child: _imagemSelecionada != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(_imagemSelecionada!, fit: BoxFit.cover),
-                          )
-                        : const Center(
-                            child: Icon(Icons.camera_alt, size: 50, color: Colors.grey),
-                          ),
+                        ? ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(_imagemSelecionada!, fit: BoxFit.cover))
+                        : const Center(child: Icon(Icons.camera_alt, size: 50, color: Colors.grey)),
                   ),
                 ),
                 if (_isAnalysing)
                   Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
+                    height: 200, width: double.infinity,
+                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), borderRadius: BorderRadius.circular(12)),
+                    child: const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
                   ),
               ],
             ),
             const SizedBox(height: 20),
             
+            // MODIFICADO: Chamada para a lista de alimentos
             _buildListaAlimentos(),
             
             const SizedBox(height: 20),
             
+            // Botão Salvar (Continua igual)
             ElevatedButton(
               onPressed: _isLoading ? null : _salvarRefeicao,
               child: _isLoading
@@ -308,8 +344,12 @@ class _RegistroPageState extends State<RegistroPage> {
     );
   }
 
-  // (Função _buildListaAlimentos)
+  // MODIFICADO: A UI da lista de alimentos agora tem o botão "+"
   Widget _buildListaAlimentos() {
+    if (_isAnalysing) { // Mostra um loading *enquanto* a lista está sendo construída
+      return const Center(child: CircularProgressIndicator());
+    }
+
     if (_alimentosAnalisados.isEmpty) {
       return const Center(
         child: Text("A análise da IA aparecerá aqui."),
@@ -324,10 +364,11 @@ class _RegistroPageState extends State<RegistroPage> {
         ),
         const SizedBox(height: 10),
 
+        // MODIFICADO: A ListTile agora tem um 'onTap'
         ListView.builder(
           itemCount: _alimentosAnalisados.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(), 
+          shrinkWrap: true, 
+          physics: const NeverScrollableScrollPhysics(),
           itemBuilder: (context, index) {
             final alimento = _alimentosAnalisados[index];
             return Card(
@@ -337,13 +378,27 @@ class _RegistroPageState extends State<RegistroPage> {
                 subtitle: Text(
                   "Kcal: ${alimento['calorias']} | P: ${alimento['proteinas']}g | C: ${alimento['carboidratos']}g | G: ${alimento['gorduras']}g"
                 ),
+                // NOVO: Ação de 'onTap' para editar o item
+                onTap: () {
+                  _mostrarDialogoEdicao(item: alimento, index: index);
+                },
               ),
             );
           },
         ),
         
-        const SizedBox(height: 20),
+        // NOVO: Botão para adicionar manualmente
+        TextButton.icon(
+          icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+          label: const Text("Adicionar Alimento", style: TextStyle(color: Colors.green)),
+          onPressed: () {
+            _mostrarDialogoEdicao(); // Chama o diálogo no modo "Adicionar"
+          },
+        ),
         
+        const SizedBox(height: 10),
+        
+        // (Card de Totais - Continua igual)
         const Text(
           "Total da Refeição",
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -368,7 +423,7 @@ class _RegistroPageState extends State<RegistroPage> {
     );
   }
 
-  // (Função _buildTotalColumn)
+  // (Widget auxiliar _buildTotalColumn - Continua igual)
   Column _buildTotalColumn(String label, int value, [String sufixo = ""]) {
     return Column(
       children: [
